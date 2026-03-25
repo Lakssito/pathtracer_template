@@ -90,7 +90,23 @@ public:
 	// and the unit normal N
 	bool intersect(const Ray& ray, Vector& P, double &t, Vector& N) const {
 		 // TODO (lab 1) : compute the intersection (just true/false at the begining of lab 1, then P, t and N as well)
-		return false;
+		double delta = dot(ray.u, ray.O - C)**2 - (dot(ray.O - C,ray.O - C) - (R*R));
+		if (delta >= 0) {
+			double t1 = dot(ray.u, C - ray.O) + sqrt(delta);
+			double t2 = dot(ray.u, C - ray.O) - sqrt(delta);
+			if abs(t1) >= abs(t2) {
+				t = t2;
+			}
+			else {
+				t = t1;
+			}
+			
+			P = ray.O + t*ray.u;
+			N = P-C;
+			N.normalize();
+			return true;
+		}
+		 return false;
 	}
 
 	double R;
@@ -138,7 +154,6 @@ public:
 
 		// TODO (lab 1) : if intersect with ray, use the returned information to compute the color ; otherwise black 
 		// in lab 1, the color only includes direct lighting with shadows
-
 		Vector P, N;
 		double t;
 		int object_id;
@@ -156,9 +171,23 @@ public:
 
 			// test if there is a shadow by sending a new ray
 			// if there is no shadow, compute the formula with dot products etc.
-
-
 			// TODO (lab 2) : add indirect lighting component with a recursive call
+			light_to_vector = light_position - P;
+			Ray shadow_ray(P, light_direction);
+			Vector shadow_P, shadow_N;
+			double shadow_t;
+			int shadow_id;
+
+			if (intersect(shadow_ray, shadow_P, shadow_N, shadow_t, shadow_id)) {
+				if (shadow_t < light_direction.norm() - 1e-6) {
+					return Vector(0, 0, 0);
+				}
+			}
+			light_to_vector = light_position - P;
+			attenuation = light_intensity / (4 * M_PI * light_to_vector.norm2());
+			material_color = objects[object_id]->albedo/M_PI;
+			solid_angle = dot(N, light_to_vector / light_to_vector.norm());
+			return attenuation * material_color * solid_angle;
 		}
 
 		
@@ -217,7 +246,7 @@ int main() {
 			Vector color;
 
 			// TODO (lab 1) : correct ray_direction so that it goes through each pixel (j, i)			
-			Vector ray_direction(0., 0., -1);
+			Vector ray_direction(j - W/2+0.5, H/2 - i - 0.5, -(W/(2*tan(scene.fov/2))));
 
 			Ray ray(scene.camera_center, ray_direction);
 
