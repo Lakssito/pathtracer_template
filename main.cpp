@@ -407,7 +407,7 @@ public:
    }
   
 
-
+// empty commit to begin lab 4
  bool intersect(const Ray& ray, Vector& P, double& t, Vector& N) const {
      // lab 4 : recursively apply the bounding-box test from a BVH datastructure
 
