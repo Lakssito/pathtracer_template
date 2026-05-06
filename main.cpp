@@ -816,8 +816,8 @@ public:
 
 
 int main() {
- int W = 512;
- int H = 512;
+ int W = 1024;
+ int H = 1024;
 
 
 
@@ -868,15 +868,15 @@ int main() {
 
 
  TriangleMesh cat(Vector(0.8, 0.6, 0.4));
- cat.readOBJ("car.obj");
+ cat.readOBJ("cat.obj");
 //  for (auto& v : cat.vertices) {
 //      double y = v[1], z = v[2];
 //      v[1] = z; v[2] = -y;
 //  }
- for (auto& v : cat.vertices) {
-     double x = v[0], z = v[2];
-     v[0] = z; v[2] = -x;
- }
+//  for (auto& v : cat.vertices) {
+//      double x = v[0], z = v[2];
+//      v[0] = z; v[2] = -x;
+//  }
  cat.scale_translate(0.6, Vector(0, -10, 0));
  cat.construireBVH(); // lab 4 : construire le BVH apres toutes les transformations
  scene.addObject(&cat);
