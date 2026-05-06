@@ -408,61 +408,135 @@ public:
   
 
 // empty commit to begin lab 4
- bool intersect(const Ray& ray, Vector& P, double& t, Vector& N) const {
+
+ // lab 4 : construction recursive du BVH
+ int construireBVH_recursif(int debut, int fin) {
+     int idx_noeud = bvh_boites_min.size();
+
+     // calculer la boite englobante de tous les triangles [debut, fin)
+     Vector boite_min_locale(1e18, 1e18, 1e18), boite_max_locale(-1e18, -1e18, -1e18);
+     for (int k = debut; k < fin; k++) {
+         for (int v = 0; v < 3; v++) {
+             const Vector& sommet = vertices[indices[k].vtx[v]];
+             for (int axe = 0; axe < 3; axe++) {
+                 if (sommet[axe] < boite_min_locale[axe]) boite_min_locale[axe] = sommet[axe];
+                 if (sommet[axe] > boite_max_locale[axe]) boite_max_locale[axe] = sommet[axe];
+             }
+         }
+     }
+
+     //  now stocker le nouveau noeud dans les vecteurs paralleles
+     bvh_boites_min.push_back(boite_min_locale);
+     bvh_boites_max.push_back(boite_max_locale);
+     bvh_enfants_gauche.push_back(-1);
+     bvh_enfants_droite.push_back(-1);
+     bvh_debuts_tri.push_back(debut);
+     bvh_fins_tri.push_back(fin);
+
+     // critere d'arret : feuille si peu de triangles
+     if (fin - debut < 5) return idx_noeud;
+
+     // trouver l'axe le plus long de la diagonale
+     Vector diagonale = boite_max_locale - boite_min_locale;
+     int axe_plus_long = 0;
+     if (diagonale[1] > diagonale[0]) axe_plus_long = 1;
+     if (diagonale[2] > diagonale[axe_plus_long]) axe_plus_long = 2;
+
+     double milieu = (boite_min_locale[axe_plus_long] + boite_max_locale[axe_plus_long]) / 2.0;
+
+     // partitionner all triangles autour du milieu 
+     int pivot = debut;
+     for (int k = debut; k < fin; k++) {
+         Vector barycentre = (vertices[indices[k].vtx[0]] + vertices[indices[k].vtx[1]] + vertices[indices[k].vtx[2]]) / 3.0;
+         if (barycentre[axe_plus_long] < milieu) {
+             TriangleIndices temp = indices[k];
+             indices[k] = indices[pivot];
+             indices[pivot] = temp;
+             pivot++;
+         }
+     }
+
+     // eviter partition degeneree (tous d'un seul cote)
+     if (pivot <= debut || pivot >= fin) pivot = (debut + fin) / 2;
+
+     int idx_gauche = construireBVH_recursif(debut, pivot);
+     int idx_droite = construireBVH_recursif(pivot, fin);
+
+     // acceder par index (pas reference) car push_back peut reallouer
+     bvh_enfants_gauche[idx_noeud] = idx_gauche;
+     bvh_enfants_droite[idx_noeud] = idx_droite;
+
+     return idx_noeud;
+ }
+
+ void construireBVH() {
+     bvh_boites_min.clear();  bvh_boites_max.clear();
+     bvh_enfants_gauche.clear();  bvh_enfants_droite.clear();
+     bvh_debuts_tri.clear();  bvh_fins_tri.clear();
+     construireBVH_recursif(0, indices.size());
+ }
+
+ bool intersect_bvh(const Ray& ray, Vector& P, double& t, Vector& N, int idx_noeud) const {
+
+     // lab 3 : check against the mesh bounding box first (now pernode)
+     double tmin_boite = -1e18, tmax_boite = 1e18;
+     for (int axe = 0; axe < 3; axe++) {
+         double t0 = (bvh_boites_min[idx_noeud][axe] - ray.O[axe]) / ray.u[axe];
+         double t1 = (bvh_boites_max[idx_noeud][axe] - ray.O[axe]) / ray.u[axe];
+         if (t0 > t1) { double tmp = t0; t0 = t1; t1 = tmp; }
+         if (t0 > tmin_boite) tmin_boite = t0;
+         if (t1 < tmax_boite) tmax_boite = t1;
+     }
+     if (tmax_boite < 0 || tmin_boite > tmax_boite) return false;
+
+     // feuille : lab 3 : for each triangle, compute le ray triangle intersection with MollerTrumbore algorithm
+     if (bvh_enfants_gauche[idx_noeud] == -1) {
+         bool trouve = false;
+         for (int k = bvh_debuts_tri[idx_noeud]; k < bvh_fins_tri[idx_noeud]; k++) {
+             const Vector& A = vertices[indices[k].vtx[0]];
+             const Vector& B = vertices[indices[k].vtx[1]];
+             const Vector& C = vertices[indices[k].vtx[2]];
+
+             Vector e1 = B - A;
+             Vector e2 = C - A;
+             Vector Nvec = cross(e1, e2);
+
+             double denom = dot(ray.u, Nvec);
+             if (fabs(denom) < 1e-10) continue;
+
+             Vector AO = A - ray.O;
+             Vector AOxu = cross(AO, ray.u);
+
+             double beta  =  dot(e2, AOxu) / denom;
+             double gamma = -dot(e1, AOxu) / denom;
+             double alpha = 1.0 - beta - gamma;
+             double localT = dot(AO, Nvec) / denom;
+
+             if (alpha < 0 || beta < 0 || gamma < 0 || localT < 1e-6) continue;
+             if (localT < t) {
+                 t = localT;
+                 P = ray.O + t * ray.u;
+                 N = Nvec;
+                 N.normalize();
+                 if (dot(ray.u, N) > 0) N = N * (-1.0);
+                 trouve = true;
+             }
+         }
+         return trouve;
+     }
+
      // lab 4 : recursively apply the bounding-box test from a BVH datastructure
+     bool hit_gauche = intersect_bvh(ray, P, t, N, bvh_enfants_gauche[idx_noeud]);
+     bool hit_droite = intersect_bvh(ray, P, t, N, bvh_enfants_droite[idx_noeud]);
+     return hit_gauche || hit_droite;
+ }
 
-     // lab 3 : check against the mesh bounding box first
-     Vector bmin(1e18, 1e18, 1e18), bmax(-1e18, -1e18, -1e18);
-     for (const auto& v : vertices) {
-         for (int k = 0; k < 3; k++) {
-             bmin[k] = std::min(bmin[k], v[k]);
-             bmax[k] = std::max(bmax[k], v[k]);
-         }
-     }
-     double tmin = -1e18, tmax = 1e18;
-     for (int k = 0; k < 3; k++) {
-         double t0 = (bmin[k] - ray.O[k]) / ray.u[k];
-         double t1 = (bmax[k] - ray.O[k]) / ray.u[k];
-         if (t0 > t1) std::swap(t0, t1);
-         tmin = std::max(tmin, t0);
-         tmax = std::min(tmax, t1);
-     }
-     if (tmax < 0 || tmin > tmax) return false;
 
-     // lab 3 : for each triangle, compute the ray-triangle intersection with Moller-Trumbore algorithm
+// lab 3 intersect function
+ bool intersect(const Ray& ray, Vector& P, double& t, Vector& N) const {
      t = 1e18;
-     bool found = false;
-     for (const auto& tri : indices) {
-         const Vector& A = vertices[tri.vtx[0]];
-         const Vector& B = vertices[tri.vtx[1]];
-         const Vector& C = vertices[tri.vtx[2]];
-
-         Vector e1 = B - A;
-         Vector e2 = C - A;
-         Vector Nvec = cross(e1, e2);
-
-         double denom = dot(ray.u, Nvec);
-         if (fabs(denom) < 1e-10) continue;
-
-         Vector AO = A - ray.O;
-         Vector AOxu = cross(AO, ray.u);
-
-         double beta  =  dot(e2, AOxu) / denom;
-         double gamma = -dot(e1, AOxu) / denom;
-         double alpha = 1.0 - beta - gamma;
-         double localT = dot(AO, Nvec) / denom;
-
-         if (alpha < 0 || beta < 0 || gamma < 0 || localT < 1e-6) continue;
-         if (localT < t) {
-             t = localT;
-             P = ray.O + t * ray.u;
-             N = Nvec;
-             N.normalize();
-             if (dot(ray.u, N) > 0) N = N * (-1.0);
-             found = true;
-         }
-     }
-     return found;
+     if (bvh_boites_min.empty()) return false;
+     return intersect_bvh(ray, P, t, N, 0);
  }
 
 
@@ -471,7 +545,12 @@ public:
  std::vector<Vector> normals;
  std::vector<Vector> uvs;
  std::vector<Vector> vertexcolors;
+ // lpur lab 4 le BVH stocke dans des vecteurs paralleles (un index= un noeud)
+ std::vector<Vector> bvh_boites_min, bvh_boites_max;
+ std::vector<int> bvh_enfants_gauche, bvh_enfants_droite;
+ std::vector<int> bvh_debuts_tri, bvh_fins_tri;
 };
+
 
 
 
@@ -799,6 +878,7 @@ int main() {
      v[0] = z; v[2] = -x;
  }
  cat.scale_translate(0.6, Vector(0, -10, 0));
+ cat.construireBVH(); // lab 4 : construire le BVH apres toutes les transformations
  scene.addObject(&cat);
 
 
