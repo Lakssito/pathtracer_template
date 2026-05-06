@@ -868,11 +868,11 @@ int main() {
 
 
  TriangleMesh cat(Vector(0.8, 0.6, 0.4));
- cat.readOBJ("cat.obj");
- for (auto& v : cat.vertices) {
-     double y = v[1], z = v[2];
-     v[1] = z; v[2] = -y;
- }
+ cat.readOBJ("car.obj");
+//  for (auto& v : cat.vertices) {
+//      double y = v[1], z = v[2];
+//      v[1] = z; v[2] = -y;
+//  }
  for (auto& v : cat.vertices) {
      double x = v[0], z = v[2];
      v[0] = z; v[2] = -x;
