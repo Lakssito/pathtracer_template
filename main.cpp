@@ -662,16 +662,11 @@ public:
 
 
          if (objects[object_id]->mirror) {
-
-
-
-
-
-
-
-
-             // return getColor in the reflected direction, with recursion_depth+1 (recursively)
-         } // else
+             Vector reflected_dir = ray.u - 2 * dot(ray.u, N) * N;
+             reflected_dir.normalize();
+             Ray reflected_ray(P + 1e-6 * N, reflected_dir);
+             return getColor(reflected_ray, recursion_depth + 1);
+         }
 
 
 
@@ -837,7 +832,7 @@ int main() {
 
 
 
- Sphere center_sphere(Vector(0, 0, 0), 10., Vector(0.8, 0.8, 0.8));
+ Sphere mirror_sphere(Vector(0, 0, 0), 10., Vector(1, 1, 1), true); // mirror
  Sphere wall_left(Vector(-1000, 0, 0), 940, Vector(0.5, 0.8, 0.1));
  Sphere wall_right(Vector(1000, 0, 0), 940, Vector(0.9, 0.2, 0.3));
  Sphere wall_front(Vector(0, 0, -1000), 940, Vector(0.1, 0.6, 0.7));
@@ -889,6 +884,7 @@ int main() {
 
 
 
+ //scene.addObject(&mirror_sphere);
  scene.addObject(&wall_left);
  scene.addObject(&wall_right);
  scene.addObject(&wall_front);
